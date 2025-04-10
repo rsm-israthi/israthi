@@ -1,0 +1,13 @@
+---
+title: "Isha"
+image: "files/image.jpeg"
+about:
+  template: jolla
+  links:
+    - icon: envelope
+      href: mailto:israthi@ucsd.edu
+    - icon: linkedin
+      href: http://linkedin.com/in/isha-rathi-511b0a1b2
+---
+
+Welcome to my website!
