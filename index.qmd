@@ -1,6 +1,6 @@
 ---
 title: "Isha"
-image: "files/image.jpeg"
+image: "files/image1.jpeg"
 about:
   template: jolla
   links:
