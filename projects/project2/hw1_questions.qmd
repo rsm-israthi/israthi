@@ -381,6 +381,7 @@ So the result is descriptive, not causal — it's still interesting, but we can'
 To better understand the distribution of how much people gave, we plot **histograms** of donation amounts for both treatment and control groups — limited to **only those who donated**.
 Each plot includes a **red vertical line** marking the **mean donation** for that group.
 
+
 ```{r}
 library(ggplot2)
 library(dplyr)
@@ -388,30 +389,47 @@ library(dplyr)
 # Filter to only donors
 df_donors <- df %>% filter(gave == 1)
 
-# Compute group means
-mean_donations <- df_donors %>%
-  group_by(treatment) %>%
-  summarise(avg = mean(amount))
+# Add group label
+df_donors <- df_donors %>%
+  mutate(group = ifelse(treatment == 1, "Treatment", "Control"))
 
-# Histogram for Control Group
-ggplot(df_donors %>% filter(treatment == 0), aes(x = amount)) +
-  geom_histogram(binwidth = 5, fill = "lightblue", color = "white") +
-  geom_vline(xintercept = mean_donations$avg[mean_donations$treatment == 0],
-             color = "red", linetype = "dashed", linewidth = 1) +
-  labs(title = "Control Group: Distribution of Donation Amounts",
-       x = "Donation Amount", y = "Number of Donors") +
-  theme_minimal()
+# Compute group means for vlines
+mean_donations <- df_donors %>%
+  group_by(group) %>%
+  summarise(avg = mean(amount), .groups = "drop")
+
+# Merge means back into original data
+df_donors <- df_donors %>%
+  left_join(mean_donations, by = "group")
+
+# Plot using facet_wrap
+ggplot(df_donors, aes(x = amount)) +
+  geom_histogram(binwidth = 5, fill = "lightyellow", color = "black") +
+  geom_vline(aes(xintercept = avg), color = "red", linetype = "dashed", linewidth = 1) +
+  facet_wrap(~ group, ncol = 2) +
+  labs(
+    title = "Distribution of Donation Amounts Among Donors",
+    x = "Donation Amount",
+    y = "Number of Donors"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 14),
+    strip.text = element_text(size = 12, face = "bold")
+  )
+
 ```
-```{r}
-# Histogram for Treatment Group
-ggplot(df_donors %>% filter(treatment == 1), aes(x = amount)) +
-  geom_histogram(binwidth = 5, fill = "orange", color = "white") +
-  geom_vline(xintercept = mean_donations$avg[mean_donations$treatment == 1],
-             color = "red", linetype = "dashed", linewidth = 1) +
-  labs(title = "Treatment Group: Distribution of Donation Amounts",
-       x = "Donation Amount", y = "Number of Donors") +
-  theme_minimal()
-```
+**Interpretation**
+The histograms above show the distribution of donation amounts among individuals who chose to donate, separated by treatment group.
+
+The red dashed line in each panel marks the mean donation for that group.
+
+Visually, both distributions are heavily right-skewed, with most donations clustered below $100 but a few large contributions stretching the range.
+The mean donation is very similar between the treatment and control groups, consistent with earlier statistical results (like the conditional t-test and regression).
+
+This supports the conclusion that while the matching offer increased the likelihood of giving, it did not significantly affect how much donors gave once they decided to give.
+
+In other words: the treatment affected the extensive margin (whether to give), not the intensive margin (how much to give).
 
 ## Simulation Experiment
 
@@ -429,26 +447,65 @@ We simulate:
 - Treatment group donations with a Bernoulli distribution: `p = 0.022`
 - 100,000 draws each, and plot the running average of the differences.
 
-```{r, fig.width=7, fig.height=4, message=FALSE, warning=FALSE}
+```{r}
 set.seed(123)  # for reproducibility
 
 # Simulate outcomes
 control_sim <- rbinom(100000, 1, 0.018)
-treat_sim <- rbinom(100000, 1, 0.022)
+treat_sim <- rbinom(10000, 1, 0.022)
 
 # Difference in donations
-diffs <- treat_sim - control_sim
+diffs <- treat_sim - control_sim[1:10000]
 
 # Cumulative average of the differences
 cum_avg <- cumsum(diffs) / seq_along(diffs)
+# Plot
+library(ggplot2)
+df <- data.frame(
+  Simulations = 1:10000,
+  CumulativeAverage = cum_avg
+)
 
-# Plot cumulative average
-plot(cum_avg, type = "l", col = "steelblue",
-     xlab = "Number of Simulated Respondents",
-     ylab = "Cumulative Average (Treatment - Control)",
-     main = "Law of Large Numbers: Cumulative Difference in Donation Rates")
-abline(h = 0.004, col = "red", lty = 2)  # true difference
+ggplot(df, aes(x = Simulations)) +
+  geom_line(aes(y = CumulativeAverage, color = "Cumulative Average of Differences"), size = 0.7) +
+  geom_hline(aes(yintercept = 0.004, color = "True Mean Difference (0.022 - 0.018)", linetype = "True Mean Difference (0.022 - 0.018)"), size = 1) +
+  scale_color_manual(
+    name = "",
+    values = c(
+      "Cumulative Average of Differences" = "#1f77b4",
+      "True Mean Difference (0.022 - 0.018)" = "red"
+    )
+  ) +
+  scale_linetype_manual(
+    name = "",
+    values = c("True Mean Difference (0.022 - 0.018)" = "dashed")
+  ) +
+  labs(
+    title = "Law of Large Numbers: Convergence of Mean Difference",
+    x = "Number of Simulations",
+    y = "Cumulative Average Difference"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "top"
+  )
+
 ```
+```{r}
+library(ggplot2)
+ggplot(data.frame(Sim = 1:10000, Avg = cum_avg), aes(x = Sim, y = Avg)) +
+  geom_line(color = "#1f77b4", size = 0.7) +
+  geom_hline(yintercept = 0.004, color = "red", linetype = "dashed", size = 1) +
+  labs(
+    title = "Law of Large Numbers: Convergence of Mean Difference",
+    x = "Number of Simulations",
+    y = "Cumulative Average Difference"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(hjust = 0.5))
+  ```
+
 **Interpretation**
 The blue line shows the cumulative average of donation rate differences as we simulate more and more respondents. The red dashed line shows the true underlying difference in means (0.004).
 
@@ -463,33 +520,31 @@ The Central Limit Theorem (CLT) tells us that the sampling distribution of the s
 
 To demonstrate this, we simulate 1,000 experiments for different sample sizes and observe how the **distribution of average treatment effects** changes.
 
+
 ```{r}
 set.seed(42)
 
-# Simulation parameters
 sample_sizes <- c(50, 200, 500, 1000)
-n_sims <- 1000
+true_diff <- 0.022 - 0.018
 
-# Function to simulate average differences for a given sample size
-simulate_diffs <- function(n) {
-  replicate(n_sims, {
+par(mfrow = c(2, 2))  # Set up 2x2 grid of plots
+
+for (n in sample_sizes) {
+  diffs <- replicate(1000, {
     control <- rbinom(n, 1, 0.018)
-    treat <- rbinom(n, 1, 0.022)
-    mean(treat) - mean(control)
+    treatment <- rbinom(n, 1, 0.022)
+    mean(treatment) - mean(control)
   })
+  
+  hist(diffs, breaks = 30, col = "lightblue", border = "black",
+       main = paste("Sample Size:", n),
+       xlab = "Average (Treatment - Control)")
+  abline(v = 0, col = "black", lty = 2)
+  abline(v = true_diff, col = "red", lty = 2)
+  legend("topright", legend = sprintf("True Diff = %.4f", true_diff),
+         lty = 2, col = "red", bty = "n")
 }
 
-# Run simulations
-diff_list <- lapply(sample_sizes, simulate_diffs)
-names(diff_list) <- paste("n =", sample_sizes)
-
-# Plot histograms
-par(mfrow = c(2, 2))
-for (i in seq_along(diff_list)) {
-  hist(diff_list[[i]], breaks = 30, main = paste("Sample Size", sample_sizes[i]),
-       xlab = "Average Treatment - Control", col = "lightblue", border = "white")
-  abline(v = 0, col = "red", lwd = 2, lty = 2)
-}
 ```
 **Interpretation**
 Each histogram shows the sampling distribution of the difference in means (treatment - control) for 1,000 simulated experiments at a given sample size.
