@@ -492,19 +492,7 @@ ggplot(df, aes(x = Simulations)) +
   )
 
 ```
-```{r}
-library(ggplot2)
-ggplot(data.frame(Sim = 1:10000, Avg = cum_avg), aes(x = Sim, y = Avg)) +
-  geom_line(color = "#1f77b4", size = 0.7) +
-  geom_hline(yintercept = 0.004, color = "red", linetype = "dashed", size = 1) +
-  labs(
-    title = "Law of Large Numbers: Convergence of Mean Difference",
-    x = "Number of Simulations",
-    y = "Cumulative Average Difference"
-  ) +
-  theme_minimal(base_size = 14) +
-  theme(plot.title = element_text(hjust = 0.5))
-  ```
+
 
 **Interpretation**
 The blue line shows the cumulative average of donation rate differences as we simulate more and more respondents. The red dashed line shows the true underlying difference in means (0.004).
