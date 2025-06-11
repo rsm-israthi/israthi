@@ -140,8 +140,6 @@ table(Custom = custom_result$clusters, BuiltIn = builtin_result$cluster)
 > Despite different label numbers, we observe strong overlap between the groupings, which indicates that the two methods produce **similar clustering structure** even though cluster IDs differ.
 :::
 
-_todo: Calculate both the within-cluster-sum-of-squares and silhouette scores (you can use built-in functions to do so) and plot the results for various numbers of clusters (ie, K=2,3,...,7). What is the "right" number of clusters as suggested by these two metrics?_
-
 ## Evaluating Optimal Number of Clusters
 
 To determine the most appropriate value of `K`, we calculate:
