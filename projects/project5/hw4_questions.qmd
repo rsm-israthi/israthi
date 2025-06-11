@@ -1,0 +1,401 @@
+---
+title: "K-Means Clustering"
+author: "Isha Rathi"
+date: today
+---
+
+## K-Means
+
+```{r, message=FALSE, warning=FALSE, results='hide'}
+# Load libraries
+library(ggplot2)
+library(dplyr)
+
+# Load the dataset from CSV file
+penguins_raw <- read.csv("files/palmer_penguins.csv")
+
+# Select relevant columns and remove missing values
+penguins_data <- penguins_raw %>%
+  select(bill_length_mm, flipper_length_mm) %>%
+  na.omit()
+```
+We focus on bill_length_mm and flipper_length_mm for clustering and drop rows with missing data using na.omit().
+
+### **Define Custom K-Means Function**
+```{r}
+kmeans_custom <- function(data, k, max_iter = 10) {
+  set.seed(123)
+  n <- nrow(data)
+  centers <- data[sample(1:n, k), ]  # Randomly initialize cluster centers
+  clusters <- rep(0, n)
+  
+  for (iter in 1:max_iter) {
+    # Assign each point to the closest center
+    for (i in 1:n) {
+      distances <- apply(centers, 1, function(center) sum((data[i, ] - center)^2))
+      clusters[i] <- which.min(distances)
+    }
+
+    # Plot current clustering
+    df_plot <- data.frame(data, cluster = as.factor(clusters))
+    df_centers <- data.frame(centers, cluster = as.factor(1:k))
+
+    p <- ggplot(df_plot, aes(x = bill_length_mm, y = flipper_length_mm, color = cluster)) +
+      geom_point(size = 2) +
+      geom_point(data = df_centers, aes(x = bill_length_mm, y = flipper_length_mm), 
+                 color = "black", shape = 8, size = 4) +
+      ggtitle(paste("Iteration", iter)) +
+      theme_minimal()
+
+    print(p)
+
+    # Update cluster centers
+    new_centers <- do.call(rbind, lapply(1:k, function(j) {
+      colMeans(data[clusters == j, , drop = FALSE])
+    }))
+
+    # Break if centers stop changing
+    if (all(centers == new_centers)) break
+    centers <- new_centers
+  }
+  
+  return(list(clusters = clusters, centers = centers))
+}
+```
+
+::: {.callout-note title="Interpretation of Custom K-Means Implementations"}
+
+> The custom `kmeans_custom()` function replicates the K-Means clustering algorithm in a straightforward and visual manner. It helps to understand how the algorithm works by showing the cluster assignments and movement of cluster centers across iterations.
+
+> Key highlights of this implementation:
+> 
+- **Random Initialization:** The algorithm begins by selecting `k` initial cluster centers randomly from the dataset.
+- **Iterative Refinement:** In each iteration, data points are assigned to the nearest center, and then the centers are updated to the average position of their assigned points.
+- **Early Stopping:** The loop stops automatically if the centers no longer change, which indicates convergence.
+- **Visual Feedback:** Each iteration is visualized using a scatter plot that shows:
+  - Cluster membership (color-coded points)
+  - Cluster centers (black stars)
+- **Output:** The function returns the final clusters and their centers, which can be used for further analysis or comparison.
+> 
+> This approach not only demonstrates the mechanics of K-Means but also provides a useful tool for visually diagnosing how clustering evolves with each iteration.
+:::
+
+### **Run custom k-means with 3 clusters**
+```{r}
+set.seed(42)
+custom_result <- kmeans_custom(penguins_data, k = 3)
+```
+::: {.callout-note title="Interpretation of K-Means Iterations"} 
+
+> The 10 visual outputs from our custom K-Means algorithm illustrate how the clustering process evolves over time:
+> 
+- **Iteration 1:** Initial cluster centers (black stars) are randomly placed. The points are grouped based on proximity to these centers, resulting in rough initial clusters.
+- **Iterations 2–4:** Cluster centers shift noticeably as points are reassigned. The clusters begin to align more clearly with natural groupings in the data.
+- **Iterations 5–7:** Adjustments become smaller. Most points retain their cluster assignments, and the centers move only slightly.
+- **Iterations 8–10:** The algorithm converges—clusters stabilize, and center positions stop changing. Final groupings appear well-separated and meaningful.
+> 
+> This step-by-step visualization helps to **"see" convergence** in action and understand how K-Means dynamically organizes the data.
+:::
+### **Built-in kmeans() Function for Comparison**
+
+```{r}
+# Built-in kmeans function
+set.seed(42)
+builtin_result <- kmeans(penguins_data, centers = 3, nstart = 10)
+
+# Add result to dataset
+penguins_data$cluster_builtin <- as.factor(builtin_result$cluster)
+
+# Plot
+ggplot(penguins_data, aes(x = bill_length_mm, y = flipper_length_mm, color = cluster_builtin)) +
+  geom_point(size = 2) +
+  ggtitle("Built-in kmeans() Clustering") +
+  theme_minimal()
+```
+::: {.callout-note title="Interpretation of Built-in `kmeans()` Result"}  
+
+> The built-in `kmeans()` function successfully groups the data into three distinct clusters based on `bill_length_mm` and `flipper_length_mm`. The clustering shows:
+> 
+- **Green cluster:** Represents penguins with longer flippers and moderate bill lengths.
+- **Red cluster:** Contains penguins with medium-length flippers and a broad range of bill sizes.
+- **Blue cluster:** Captures penguins with shorter flippers and typically shorter bills.
+> 
+> Compared to the custom implementation, the built-in method provides similar group
+:::
+
+### **Compare Cluster Assignments**
+```{r}
+# Compare the clustering
+table(Custom = custom_result$clusters, BuiltIn = builtin_result$cluster)
+```
+
+::: {.callout-note title="Interpretation of Cluster Comparison Table"} 
+> 
+> The comparison table shows how cluster assignments from our custom K-Means algorithm align with those from the built-in `kmeans()` function:
+> 
+- Each row represents a cluster from the **custom** implementation.
+- Each column represents a cluster from the **built-in** function.
+- For example, **Custom Cluster 1** mostly matches **Built-in Cluster 2** with 64 points.
+> 
+> Despite different label numbers, we observe strong overlap between the groupings, which indicates that the two methods produce **similar clustering structure** even though cluster IDs differ.
+:::
+
+_todo: Calculate both the within-cluster-sum-of-squares and silhouette scores (you can use built-in functions to do so) and plot the results for various numbers of clusters (ie, K=2,3,...,7). What is the "right" number of clusters as suggested by these two metrics?_
+
+## Evaluating Optimal Number of Clusters
+
+To determine the most appropriate value of `K`, we calculate:
+
+- **Within-cluster Sum of Squares (WSS):** Measures cluster compactness; lower is better.
+- **Silhouette Score:** Measures how similar a point is to its own cluster versus others; ranges from -1 to 1, and higher is better.
+
+We use values of `K` from 2 to 7 and plot both metrics.
+
+```{r}
+library(cluster)
+library(factoextra)
+
+wss_values <- numeric()
+silhouette_values <- numeric()
+k_values <- 2:7
+
+for (k in k_values) {
+  kmeans_model <- kmeans(penguins_data, centers = k, nstart = 10)
+  wss_values <- c(wss_values, kmeans_model$tot.withinss)
+  
+  silhouette_avg <- mean(silhouette(kmeans_model$cluster, dist(penguins_data))[, 3])
+  silhouette_values <- c(silhouette_values, silhouette_avg)
+}
+```
+```{r}
+# Plot WSS
+plot(k_values, wss_values, type = "b", pch = 19, frame = FALSE,
+     xlab = "Number of Clusters (K)", ylab = "Total Within-Cluster Sum of Squares",
+     main = "Elbow Method for Optimal K")
+
+# Plot Silhouette
+plot(k_values, silhouette_values, type = "b", pch = 19, frame = FALSE,
+     xlab = "Number of Clusters (K)", ylab = "Average Silhouette Score",
+     main = "Silhouette Scores for Different K")
+```
+
+::: {.callout-note title="Interpretation"} 
+
+- **WSS Plot (Elbow Method):**  
+  A sharp drop is observed until **K = 3**, after which the WSS decreases more slowly. This "elbow" suggests diminishing returns with higher `K`.
+
+- **Silhouette Scores:**  
+  The silhouette score is **highest at K = 3**, indicating that this value yields the most well-separated and cohesive clusters.
+
+**Conclusion:**  
+Both the **elbow method** and the **silhouette score** point to **K = 3** as the most appropriate number of clusters for this dataset.
+:::
+
+## K Nearest Neighbors
+
+```{r}
+# gen data -----
+set.seed(42)
+n <- 100
+x1 <- runif(n, -3, 3)
+x2 <- runif(n, -3, 3)
+x <- cbind(x1, x2)
+
+# define a wiggly boundary
+boundary <- sin(4*x1) + x1
+y <- ifelse(x2 > boundary, 1, 0) |> as.factor()
+dat <- data.frame(x1 = x1, x2 = x2, y = y)
+```
+
+## Visualizing the Synthetic Dataset
+
+Below, we plot the generated dataset to illustrate the nonlinear relationship defined by the wiggly boundary. Each point is color-coded based on its class label `y`.
+
+```{r}
+# Plot synthetic classification dataset
+ggplot(dat, aes(x = x1, y = x2, color = y)) +
+  geom_point(size = 2) +
+  stat_function(fun = function(x) sin(4 * x) + x,
+                color = "black", linetype = "dashed", size = 1) +
+  labs(
+    title = "Synthetic Classification Data",
+    subtitle = "Dashed curve: decision boundary y = sin(4x1) + x1",
+    x = "x1",
+    y = "x2",
+    color = "Class (y)"
+  ) +
+  theme_minimal()
+```
+
+::: {.callout-note title="Interpretation"}
+
+The plot displays the dataset with two features: `x1` and `x2`.
+
+- Points are color-coded by their binary class `y` (either `0` or `1`).
+- The **dashed black line** represents the true nonlinear decision boundary defined by:
+  
+  \[
+  x_2 = \sin(4x_1) + x_1
+  \]
+
+- The classes are clearly **not linearly separable**, meaning a straight line cannot divide them accurately.
+- This type of structure makes the dataset ideal for testing **nonlinear classifiers**, such as **K-Nearest Neighbors (KNN)**, which adapt locally to the shape of the data.
+
+This visual serves as a foundation for understanding how KNN models respond to curved decision boundaries.
+:::
+
+## Generating a Test Dataset
+
+To evaluate the generalization of our KNN classifier, we generate a separate **test dataset** using the same rule as the training data. We simply change the random seed to ensure the test set is independent.
+
+```{r}
+# Generate test data with a different seed
+set.seed(2025)  # Different seed for new random values
+n_test <- 100
+x1_test <- runif(n_test, -3, 3)
+x2_test <- runif(n_test, -3, 3)
+
+# Apply same decision boundary logic
+boundary_test <- sin(4 * x1_test) + x1_test
+y_test <- ifelse(x2_test > boundary_test, 1, 0) |> as.factor()
+
+# Create test dataframe
+test_data <- data.frame(x1 = x1_test, x2 = x2_test, y = y_test)
+```
+::: {.callout-note title="Interpretation"}
+
+The test dataset follows the **same nonlinear rule** as the training set, using the function:
+
+\[
+x_2 = \sin(4x_1) + x_1
+\]
+
+- A different random seed ensures that the test points are **new and unseen**, introducing variability.
+- This separation allows us to evaluate how well the model **generalizes to out-of-sample data**, rather than memorizing the training set.
+
+The test set will be used to assess the performance of our K-Nearest Neighbors classifier in the next step.
+:::
+
+### Implementing KNN by Hand and Verifying with Built-in Function
+
+We will now implement a basic version of the K-Nearest Neighbors algorithm manually using Euclidean distance. Then, we’ll validate our results using the built-in `class::knn()` function.
+
+#### **Step 1: Manual KNN Function**
+```{r}
+knn_manual <- function(train_X, train_y, test_X, k = 5) {
+  n_test <- nrow(test_X)
+  preds <- vector("character", n_test)
+  
+  for (i in 1:n_test) {
+    # Compute Euclidean distance to all training points
+    distances <- apply(train_X, 1, function(row) sqrt(sum((row - test_X[i, ])^2)))
+    
+    # Find the indices of the k nearest neighbors
+    neighbor_idx <- order(distances)[1:k]
+    
+    # Get majority vote
+    neighbor_classes <- train_y[neighbor_idx]
+    preds[i] <- names(which.max(table(neighbor_classes)))
+  }
+  
+  return(as.factor(preds))
+}
+# Prepare input
+train_X <- dat[, c("x1", "x2")]
+train_y <- dat$y
+test_X <- test_data[, c("x1", "x2")]
+
+# Predict using manual function
+manual_preds <- knn_manual(train_X, train_y, test_X, k = 5)
+
+```
+
+#### **Step 2: Compare with Built-in KNN**
+
+```{r}
+# Load library and run built-in knn
+library(class)
+
+# Use built-in KNN with same k
+builtin_preds <- knn(train = train_X, test = test_X, cl = train_y, k = 5)
+
+# Compare predictions
+table(Manual = manual_preds, BuiltIn = builtin_preds)
+```
+::: {.callout-note title="Interpretation"}
+>
+> The confusion matrix above shows the comparison between predictions made by the **manual KNN implementation** and those made using the **built-in `class::knn()`** function in R. Each cell in the matrix indicates the number of predictions that match across the two methods.
+> 
+- **Diagonal values (50 for class 0, 50 for class 1)** show that every prediction from the manual implementation exactly matched the built-in result.
+- **Off-diagonal values (0s)** confirm that there were **no disagreements** between the two classifiers.
+> 
+> This perfect agreement (100 out of 100 matches) validates the correctness of the manual KNN logic, including:
+- Euclidean distance computation
+- k-nearest neighbor selection
+- Majority voting for classification
+> 
+:::
+
+### Evaluating Accuracy Across k = 1 to 30
+
+To identify the best value of `k` for our KNN classifier, we will:
+
+- Run our custom `knn_manual()` function for `k = 1` to `30`
+- Compare the predictions to the true labels in the test dataset
+- Compute the classification **accuracy** at each value of `k`
+- Plot the results to visualize performance
+
+This process helps determine the value of `k` that yields the highest accuracy on the test set.
+
+#### **Step 1: Run Accuracy Evaluation**
+
+```{r}
+# Store accuracy for each k
+accuracy_k <- numeric(30)
+
+# True test labels
+true_y <- test_data$y
+
+# Calculate accuracy safely for k = 1 to 30
+accuracy_k <- numeric(30)
+
+for (k in 1:30) {
+  preds_k <- knn_manual(train_X, train_y, test_X, k = k)
+  accuracy_k[k] <- mean(as.character(preds_k) == as.character(true_y)) * 100
+}
+
+```
+
+#### **Step 2: Plot Accuracy vs. k**
+
+```{r}
+# Plot accuracy curve
+plot(1:30, accuracy_k, type = "b", pch = 19,
+     xlab = "k (Number of Nearest Neighbors)",
+     ylab = "Accuracy (%) on Test Data",
+     main = "KNN Accuracy for Different Values of k",
+     ylim = c(min(accuracy_k) - 5, 100))
+
+best_k <- which.max(accuracy_k)
+points(best_k, accuracy_k[best_k], col = "red", pch = 19, cex = 1.5)
+text(best_k, accuracy_k[best_k] + 2, labels = paste("Best k:", best_k), col = "red")
+```
+```{r}
+cat("Optimal k:", best_k, "with accuracy:", accuracy_k[best_k], "%\n")
+
+```
+::: {.callout-note title="Interpretation"}
+
+> The plot above displays how the test set classification accuracy varies as the number of neighbors `k` in the KNN algorithm increases from 1 to 30.
+> 
+> The highlighted red dot marks the **optimal value of `k = 2`**, where the model achieved the **highest test accuracy** of approximately **93%**. This suggests that, for this specific synthetic dataset with a non-linear decision boundary, using only the two closest neighbors leads to the best generalization on unseen data.
+> 
+**Key Observations:**
+- **High variance for small `k`**: Lower values of `k` (e.g., 1–5) show noticeable fluctuation, as each prediction depends on very few points and is more sensitive to local noise.
+- **Stable region**: Between `k = 15` and `k = 22`, the accuracy stabilizes, suggesting that a moderately smoothed decision boundary also performs reasonably well.
+- **Decline at higher `k`**: After a point, increasing `k` leads to a plateau or drop in accuracy due to **over-smoothing**, where the model loses sensitivity to local structure.
+> 
+> In summary, the accuracy curve confirms the classic **bias-variance trade-off**: smaller `
+:::
+
+ 
